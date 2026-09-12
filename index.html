@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=5.0,viewport-fit=cover">
 <title>Prudle | مهام الموظف</title>
 
 <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
@@ -94,6 +94,272 @@ button:hover{filter:brightness(.97)}
   padding:14px;
 }
 
+
+/* ===== Mobile + Chrome/Safari compatibility ===== */
+html{
+  width:100%;
+  min-height:100%;
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
+  scroll-behavior:smooth;
+}
+body{
+  width:100%;
+  min-height:100%;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  padding-left:env(safe-area-inset-left);
+  padding-right:env(safe-area-inset-right);
+}
+button,input,textarea,select{
+  font-family:Tajawal,Arial,sans-serif;
+  -webkit-appearance:none;
+  appearance:none;
+  max-width:100%;
+}
+button{
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+  min-height:44px;
+}
+input,textarea{
+  font-size:16px; /* يمنع التكبير التلقائي في Safari عند التركيز */
+}
+img{
+  max-width:100%;
+  height:auto;
+}
+.hero,
+.card,
+.employee-group,
+.employee-group-body,
+.card-head,
+.card-head > div{
+  min-width:0;
+}
+.card h3,
+.details,
+.note,
+.meta,
+.employee-group-head span{
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+.card-actions button{
+  min-width:135px;
+}
+.card-actions textarea{
+  display:block;
+  width:100%;
+  max-width:100%;
+  min-height:96px;
+  line-height:1.7;
+}
+
+/* Safari fallback for gap in older flex implementations */
+@supports not (gap: 1rem){
+  .hero > * + *{margin-right:16px}
+  .card-actions > *{margin:4px}
+}
+
+/* Tablets and phones */
+@media (max-width:900px){
+  .page{
+    width:100%;
+    max-width:100%;
+    padding:0 0 calc(28px + env(safe-area-inset-bottom));
+  }
+  .hero{
+    border-radius:0;
+    padding:16px max(14px, env(safe-area-inset-right)) 16px max(14px, env(safe-area-inset-left));
+  }
+  .cards{
+    padding:0 12px;
+  }
+  .employee-group{
+    margin-bottom:16px;
+    border-radius:16px;
+  }
+  .employee-group-body{
+    padding:11px;
+  }
+  .card{
+    padding:14px;
+  }
+  .card-head{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .card-head > div:last-child{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+  }
+}
+
+/* Standard mobile */
+@media (max-width:600px){
+  .hero{
+    gap:12px;
+    align-items:center;
+  }
+  .hero img{
+    width:54px;
+    height:54px;
+    flex:0 0 54px;
+  }
+  .hero h1{
+    font-size:19px;
+    line-height:1.35;
+  }
+  .hero p{
+    font-size:11px;
+    line-height:1.6;
+  }
+
+  .login{
+    margin:10px;
+    padding:11px;
+    border-radius:13px;
+  }
+  .login input,
+  .login button{
+    width:100%;
+    min-width:0;
+    flex:1 1 100%;
+  }
+
+  .info{
+    margin:9px 12px;
+    font-size:12px;
+    line-height:1.6;
+  }
+
+  .stats{
+    margin:10px 12px;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:7px;
+  }
+  .stat{
+    padding:10px 7px;
+    text-align:center;
+    min-width:0;
+  }
+  .stat span{
+    font-size:10px;
+    line-height:1.4;
+  }
+  .stat b{
+    font-size:20px;
+  }
+
+  .cards{
+    padding:0 10px;
+  }
+
+  .employee-group-head{
+    padding:12px;
+    font-size:13px;
+    align-items:center;
+  }
+  .employee-group-head .count{
+    flex:0 0 auto;
+    font-size:10px;
+  }
+
+  .card{
+    border-radius:14px;
+    padding:12px;
+  }
+  .card h3{
+    font-size:17px;
+    line-height:1.5;
+  }
+  .meta{
+    font-size:11px;
+    line-height:1.7;
+  }
+  .pill{
+    font-size:10px;
+    padding:5px 8px;
+  }
+  .details{
+    font-size:13px;
+    line-height:1.8;
+    padding:11px;
+  }
+  .note{
+    font-size:12px;
+    line-height:1.8;
+    padding:10px;
+  }
+
+  .card-actions{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:8px;
+  }
+  .card-actions textarea,
+  .card-actions button,
+  .card-actions .meta{
+    width:100%;
+    min-width:0;
+  }
+  .card-actions button{
+    min-height:48px;
+    font-size:14px;
+  }
+}
+
+/* Very small phones */
+@media (max-width:390px){
+  .hero{
+    padding:13px 10px;
+  }
+  .hero img{
+    width:48px;
+    height:48px;
+    flex-basis:48px;
+  }
+  .hero h1{
+    font-size:17px;
+  }
+  .hero p{
+    font-size:10px;
+  }
+  .stats{
+    grid-template-columns:1fr;
+  }
+  .stat{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    text-align:right;
+    padding:9px 12px;
+  }
+  .stat b{
+    margin:0;
+    font-size:19px;
+  }
+  .employee-group-head{
+    flex-wrap:wrap;
+  }
+}
+
+/* Prefer native browser behavior on touch devices */
+@media (hover:none){
+  button:hover{filter:none}
+  button:active{transform:scale(.99)}
+}
+
+/* iOS Safari safe-bottom spacing */
+@supports (padding:max(0px)){
+  body{
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+}
+
 </style>
 </head>
 <body>
@@ -137,14 +403,14 @@ const db=firebase.firestore();
 const TASKS="EmployeeTasks";
 
 function assignerLabel(t){
-  return txt(t?.assignedBy) || "غير مسجل";
+  return txt(t && t.assignedBy) || "غير مسجل";
 }
 const $=id=>document.getElementById(id);
 
 let tasks=[];
 let unsubscribe=null;
 
-function txt(v){return String(v??"").trim();}
+function txt(v){return String(v == null ? "" : v).trim();}
 function esc(v){return txt(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);}
 function toDate(v){
   try{
@@ -152,7 +418,7 @@ function toDate(v){
     if(v.toDate)return v.toDate();
     if(v.seconds)return new Date(v.seconds*1000);
     const d=new Date(v);return isNaN(d)?null:d;
-  }catch{return null;}
+  }catch(e){return null;}
 }
 function dateTime(v){
   const d=toDate(v);
@@ -181,7 +447,7 @@ function listenTasks(){
     .onSnapshot(snap=>{
       tasks=snap.docs.map(d=>({id:d.id,...d.data()}))
         .filter(t=>t.status!=="cancelled")
-        .sort((a,b)=>(toDate(b.createdAt)?.getTime()||0)-(toDate(a.createdAt)?.getTime()||0));
+        .sort((a,b)=>((toDate(b.createdAt) && toDate(b.createdAt).getTime()) || 0)-((toDate(a.createdAt) && toDate(a.createdAt).getTime()) || 0));
       render();
     },err=>{
       console.error(err);
@@ -284,7 +550,7 @@ async function receiveTask(id){
 }
 
 async function saveNote(id){
-  const note=txt($("note_"+id)?.value);
+  const noteEl=$("note_"+id); const note=txt(noteEl ? noteEl.value : "");
   try{
     await db.collection(TASKS).doc(id).set({
       employeeNote:note,
@@ -300,7 +566,7 @@ async function saveNote(id){
 async function finishTask(id){
   const t=tasks.find(x=>x.id===id);
   if(!t)return;
-  const note=txt($("note_"+id)?.value);
+  const noteEl=$("note_"+id); const note=txt(noteEl ? noteEl.value : "");
   if(!confirm(`تأكيد إنهاء المهمة: ${t.title}؟`))return;
   try{
     await db.collection(TASKS).doc(id).set({
@@ -314,7 +580,19 @@ async function finishTask(id){
   }
 }
 
-$("refreshBtn").onclick=()=>listenTasks();
+$("refreshBtn").onclick=function(){ listenTasks(); };
+
+var prudleResizeTimer=null;
+function prudleViewportRefresh(){
+  if(prudleResizeTimer) clearTimeout(prudleResizeTimer);
+  prudleResizeTimer=setTimeout(function(){
+    document.documentElement.style.setProperty("--prudle-vh",(window.innerHeight*0.01)+"px");
+  },80);
+}
+window.addEventListener("resize",prudleViewportRefresh);
+window.addEventListener("orientationchange",prudleViewportRefresh);
+prudleViewportRefresh();
+
 listenTasks();
 </script>
 </body>
