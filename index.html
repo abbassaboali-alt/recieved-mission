@@ -135,6 +135,10 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
 const TASKS="EmployeeTasks";
+
+function assignerLabel(t){
+  return txt(t?.assignedBy) || "غير مسجل";
+}
 const $=id=>document.getElementById(id);
 
 let tasks=[];
@@ -218,6 +222,10 @@ function render(){
               <div>
                 <h3>${esc(t.title||"—")}</h3>
                 <div class="meta">تاريخ الإسناد: ${dateTime(t.createdAt)} · الاستحقاق: ${dateOnly(t.dueDate)}</div>
+                <div class="meta" style="margin-top:5px;color:#164478;font-weight:900">
+                  <i class="fa-solid fa-user-shield"></i>
+                  أُسندت بواسطة: ${esc(assignerLabel(t))}
+                </div>
               </div>
               <div>
                 <span class="pill ${priorityClass(t.priority)}">${priorityLabel(t.priority)}</span>
