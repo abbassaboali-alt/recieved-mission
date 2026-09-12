@@ -450,6 +450,78 @@ const TASKS="EmployeeTasks";
 function assignerLabel(t){
   return txt(t && t.assignedBy) || "غير مسجل";
 }
+
+/* اسم المستخدم الذي ضغط على تأكيد الاستلام */
+let CURRENT_RECEIVER_USERNAME="";
+
+function storedUsername(){
+  const keys=["username","userName","displayName","fullName","name"];
+  const stores=[localStorage,sessionStorage];
+
+  for(const store of stores){
+    for(const key of keys){
+      try{
+        const value=txt(store.getItem(key));
+        if(value) return value;
+      }catch(e){}
+    }
+  }
+
+  try{
+    const params=new URLSearchParams(location.search);
+    return txt(
+      params.get("prudleUser") ||
+      params.get("username") ||
+      params.get("user")
+    );
+  }catch(e){
+    return "";
+  }
+}
+
+function currentReceiverUsername(){
+  return txt(CURRENT_RECEIVER_USERNAME) || storedUsername();
+}
+
+function receiverLabel(t){
+  return txt(
+    t && (
+      t.receivedByUsername ||
+      t.receivedBy ||
+      t.receiverUsername
+    )
+  ) || "غير مسجل";
+}
+
+/* استقبال اسم المستخدم من صفحة Prudle الحاضنة للـ iframe */
+window.addEventListener("message",function(event){
+  const data=event.data || {};
+
+  if(
+    data &&
+    typeof data === "object" &&
+    data.type === "PRUDLE_USER_CONTEXT"
+  ){
+    const username=txt(
+      data.username ||
+      data.userName ||
+      data.displayName ||
+      data.name
+    );
+
+    if(username){
+      CURRENT_RECEIVER_USERNAME=username;
+    }
+  }
+});
+
+function requestParentUsername(){
+  if(window.parent && window.parent !== window){
+    window.parent.postMessage({type:"PRUDLE_REQUEST_USER"},"*");
+  }
+}
+
+requestParentUsername();
 const $=id=>document.getElementById(id);
 
 let tasks=[];
@@ -537,6 +609,11 @@ function render(){
                   <i class="fa-solid fa-user-shield"></i>
                   أُسندت بواسطة: ${esc(assignerLabel(t))}
                 </div>
+                ${t.status!=="assigned"?`
+                <div class="meta" style="margin-top:5px;color:#168349;font-weight:900">
+                  <i class="fa-solid fa-user-check"></i>
+                  تم الاستلام بواسطة: ${esc(receiverLabel(t))}
+                </div>`:""}
               </div>
               <div>
                 <span class="pill ${priorityClass(t.priority)}">${priorityLabel(t.priority)}</span>
@@ -565,7 +642,11 @@ function render(){
               `:""}
 
               ${t.status==="completed"?`
-                <div class="meta">تم الاستلام: ${dateTime(t.receivedAt)} · تم الإنهاء: ${dateTime(t.completedAt)}</div>
+                <div class="meta">
+                  تم الاستلام بواسطة: ${esc(receiverLabel(t))}
+                  · وقت الاستلام: ${dateTime(t.receivedAt)}
+                  · تم الإنهاء: ${dateTime(t.completedAt)}
+                </div>
               `:""}
             </div>
           </article>
@@ -582,10 +663,24 @@ function render(){
 async function receiveTask(id){
   const t=tasks.find(x=>x.id===id);
   if(!t)return;
-  if(!confirm(`تأكيد استلام المهمة: ${t.title}؟`))return;
+
+  const receiverUsername=currentReceiverUsername();
+
+  if(!receiverUsername){
+    requestParentUsername();
+    alert("تعذر قراءة اسم المستخدم الحالي. حدّث الصفحة ثم حاول مرة أخرى.");
+    return;
+  }
+
+  if(!confirm(
+    `تأكيد استلام المهمة: ${t.title}؟\n\nسيتم تسجيل المستلم باسم: ${receiverUsername}`
+  ))return;
+
   try{
     await db.collection(TASKS).doc(id).set({
       status:"in_progress",
+      receivedBy:receiverUsername,
+      receivedByUsername:receiverUsername,
       receivedAt:firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
     },{merge:true});
