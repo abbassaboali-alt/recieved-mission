@@ -64,6 +64,36 @@ button:hover{filter:brightness(.97)}
  .cards{padding:0 10px}
  .card-head{flex-direction:column}
 }
+
+.employee-group{
+  margin:0 0 22px;
+  border:1px solid #dce6f1;
+  border-radius:20px;
+  background:#fff;
+  overflow:hidden;
+  box-shadow:0 10px 28px rgba(22,68,120,.08);
+}
+.employee-group-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:14px 17px;
+  background:linear-gradient(135deg,#164478,#2469ad);
+  color:#fff;
+  font-weight:900;
+}
+.employee-group-head .count{
+  background:#fff;
+  color:#164478;
+  border-radius:999px;
+  padding:5px 10px;
+  font-size:11px;
+}
+.employee-group-body{
+  padding:14px;
+}
+
 </style>
 </head>
 <body>
@@ -167,44 +197,62 @@ function render(){
     return;
   }
 
-  $("cards").innerHTML=tasks.map(t=>`
-    <article class="card ${t.status==="completed"?"done":""}">
-      <div class="card-head">
-        <div>
-          <h3>${esc(t.title||"—")}</h3>
-          <div class="meta"><b>الموظف: ${esc(t.employeeName||"—")}</b> · تاريخ الإسناد: ${dateTime(t.createdAt)} · الاستحقاق: ${dateOnly(t.dueDate)}</div>
-        </div>
-        <div>
-          <span class="pill ${priorityClass(t.priority)}">${priorityLabel(t.priority)}</span>
-          <span class="pill ${statusClass(t.status)}">${statusLabel(t.status)}</span>
-        </div>
+  const grouped = new Map();
+  tasks.forEach(t=>{
+    const name=txt(t.employeeName)||"غير محدد";
+    const key=name.toLowerCase();
+    if(!grouped.has(key)) grouped.set(key,{name,tasks:[]});
+    grouped.get(key).tasks.push(t);
+  });
+
+  $("cards").innerHTML=[...grouped.values()].map(group=>`
+    <section class="employee-group">
+      <div class="employee-group-head">
+        <span><i class="fa-solid fa-user"></i> ${esc(group.name)}</span>
+        <span class="count">${group.tasks.length} مهمة</span>
       </div>
+      <div class="employee-group-body">
+        ${group.tasks.map(t=>`
+          <article class="card ${t.status==="completed"?"done":""}">
+            <div class="card-head">
+              <div>
+                <h3>${esc(t.title||"—")}</h3>
+                <div class="meta">تاريخ الإسناد: ${dateTime(t.createdAt)} · الاستحقاق: ${dateOnly(t.dueDate)}</div>
+              </div>
+              <div>
+                <span class="pill ${priorityClass(t.priority)}">${priorityLabel(t.priority)}</span>
+                <span class="pill ${statusClass(t.status)}">${statusLabel(t.status)}</span>
+              </div>
+            </div>
 
-      ${t.details?`<div class="details">${esc(t.details)}</div>`:""}
-      ${t.adminNote?`<div class="note"><b>ملاحظة الإدارة:</b><br>${esc(t.adminNote)}</div>`:""}
-      ${t.employeeNote?`<div class="note employee"><b>ملاحظتي:</b><br>${esc(t.employeeNote)}</div>`:""}
+            ${t.details?`<div class="details">${esc(t.details)}</div>`:""}
+            ${t.adminNote?`<div class="note"><b>ملاحظة الإدارة:</b><br>${esc(t.adminNote)}</div>`:""}
+            ${t.employeeNote?`<div class="note employee"><b>ملاحظتي:</b><br>${esc(t.employeeNote)}</div>`:""}
 
-      <div class="card-actions">
-        ${t.status==="assigned"?`
-          <button class="btn-orange receiveBtn" data-id="${t.id}">
-            <i class="fa-solid fa-check"></i> تم الاستلام
-          </button>`:""}
+            <div class="card-actions">
+              ${t.status==="assigned"?`
+                <button class="btn-orange receiveBtn" data-id="${t.id}">
+                  <i class="fa-solid fa-check"></i> تم الاستلام
+                </button>`:""}
 
-        ${t.status==="in_progress"?`
-          <textarea id="note_${t.id}" placeholder="اكتب ملاحظتك قبل إنهاء المهمة (اختياري)...">${esc(t.employeeNote||"")}</textarea>
-          <button class="btn-green finishBtn" data-id="${t.id}">
-            <i class="fa-solid fa-circle-check"></i> تم إنهاء المهمة
-          </button>
-          <button class="saveNoteBtn" data-id="${t.id}">
-            <i class="fa-solid fa-floppy-disk"></i> حفظ الملاحظة فقط
-          </button>
-        `:""}
+              ${t.status==="in_progress"?`
+                <textarea id="note_${t.id}" placeholder="اكتب ملاحظتك قبل إنهاء المهمة (اختياري)...">${esc(t.employeeNote||"")}</textarea>
+                <button class="btn-green finishBtn" data-id="${t.id}">
+                  <i class="fa-solid fa-circle-check"></i> تم إنهاء المهمة
+                </button>
+                <button class="saveNoteBtn" data-id="${t.id}">
+                  <i class="fa-solid fa-floppy-disk"></i> حفظ الملاحظة فقط
+                </button>
+              `:""}
 
-        ${t.status==="completed"?`
-          <div class="meta">تم الاستلام: ${dateTime(t.receivedAt)} · تم الإنهاء: ${dateTime(t.completedAt)}</div>
-        `:""}
+              ${t.status==="completed"?`
+                <div class="meta">تم الاستلام: ${dateTime(t.receivedAt)} · تم الإنهاء: ${dateTime(t.completedAt)}</div>
+              `:""}
+            </div>
+          </article>
+        `).join("")}
       </div>
-    </article>
+    </section>
   `).join("");
 
   document.querySelectorAll(".receiveBtn").forEach(b=>b.onclick=()=>receiveTask(b.dataset.id));
