@@ -78,12 +78,10 @@ button:hover{filter:brightness(.97)}
   </section>
 
   <section class="login">
-    <input id="employeeCode" placeholder="اكتب رقم / كود الموظف">
-    <button id="loadBtn"><i class="fa-solid fa-right-to-bracket"></i> عرض مهامي</button>
-    <button id="logoutBtn" class="btn-gray">مسح</button>
+    <button id="refreshBtn"><i class="fa-solid fa-rotate"></i> تحديث المهام</button>
   </section>
 
-  <div class="info" id="employeeInfo">أدخل كود الموظف لعرض المهام المسندة إليك.</div>
+  <div class="info" id="employeeInfo">يتم عرض جميع المهام تلقائياً.</div>
 
   <section class="stats">
     <div class="stat"><span>تم الإسناد</span><b id="sAssigned">0</b></div>
@@ -109,7 +107,6 @@ const db=firebase.firestore();
 const TASKS="EmployeeTasks";
 const $=id=>document.getElementById(id);
 
-let employeeCode=localStorage.getItem("prudleEmployeeCode") || "";
 let tasks=[];
 let unsubscribe=null;
 
@@ -141,18 +138,12 @@ function statusClass(s){
 function priorityLabel(p){return ({high:"عالية",medium:"متوسطة",low:"منخفضة"})[p]||"متوسطة";}
 function priorityClass(p){return p==="high"?"p-high":p==="low"?"p-low":"p-medium";}
 
-function start(){
-  employeeCode=txt($("employeeCode").value);
-  if(!employeeCode)return alert("اكتب كود الموظف أولاً.");
-  localStorage.setItem("prudleEmployeeCode",employeeCode);
-  listenTasks();
-}
+
 
 function listenTasks(){
-  if(unsubscribe)unsubscribe();
+  if(unsubscribe) unsubscribe();
   $("employeeInfo").textContent="جاري تحميل المهام...";
   unsubscribe=db.collection(TASKS)
-    .where("employeeCode","==",employeeCode)
     .onSnapshot(snap=>{
       tasks=snap.docs.map(d=>({id:d.id,...d.data()}))
         .filter(t=>t.status!=="cancelled")
@@ -160,14 +151,13 @@ function listenTasks(){
       render();
     },err=>{
       console.error(err);
-      $("employeeInfo").textContent="تعذر تحميل المهام. راجع كود الموظف أو صلاحيات Firestore.";
+      $("employeeInfo").textContent="تعذر تحميل المهام. راجع صلاحيات Firestore.";
       $("cards").innerHTML='<div class="empty">تعذر الاتصال بقاعدة البيانات.</div>';
     });
 }
 
 function render(){
-  const name=tasks.find(t=>t.employeeName)?.employeeName || "";
-  $("employeeInfo").textContent=name ? `الموظف: ${name} — الكود: ${employeeCode}` : `الكود: ${employeeCode}`;
+  $("employeeInfo").textContent=`إجمالي المهام المعروضة: ${tasks.length}`;
   $("sAssigned").textContent=tasks.filter(t=>t.status==="assigned").length;
   $("sProgress").textContent=tasks.filter(t=>t.status==="in_progress").length;
   $("sCompleted").textContent=tasks.filter(t=>t.status==="completed").length;
@@ -182,7 +172,7 @@ function render(){
       <div class="card-head">
         <div>
           <h3>${esc(t.title||"—")}</h3>
-          <div class="meta">تاريخ الإسناد: ${dateTime(t.createdAt)} · الاستحقاق: ${dateOnly(t.dueDate)}</div>
+          <div class="meta"><b>الموظف: ${esc(t.employeeName||"—")}</b> · تاريخ الإسناد: ${dateTime(t.createdAt)} · الاستحقاق: ${dateOnly(t.dueDate)}</div>
         </div>
         <div>
           <span class="pill ${priorityClass(t.priority)}">${priorityLabel(t.priority)}</span>
@@ -268,23 +258,8 @@ async function finishTask(id){
   }
 }
 
-$("loadBtn").onclick=start;
-$("employeeCode").addEventListener("keydown",e=>{if(e.key==="Enter")start();});
-$("logoutBtn").onclick=()=>{
-  if(unsubscribe)unsubscribe();
-  employeeCode="";
-  tasks=[];
-  localStorage.removeItem("prudleEmployeeCode");
-  $("employeeCode").value="";
-  $("employeeInfo").textContent="أدخل كود الموظف لعرض المهام المسندة إليك.";
-  $("sAssigned").textContent="0";$("sProgress").textContent="0";$("sCompleted").textContent="0";
-  $("cards").innerHTML='<div class="empty">لا توجد مهام معروضة حالياً.</div>';
-};
-
-if(employeeCode){
-  $("employeeCode").value=employeeCode;
-  listenTasks();
-}
+$("refreshBtn").onclick=()=>listenTasks();
+listenTasks();
 </script>
 </body>
 </html>
