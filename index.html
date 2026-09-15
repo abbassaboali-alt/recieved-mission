@@ -493,35 +493,129 @@ function receiverLabel(t){
   ) || "غير مسجل";
 }
 
-/* استقبال اسم المستخدم من صفحة Prudle الحاضنة للـ iframe */
-window.addEventListener("message",function(event){
-  const data=event.data || {};
+/* =====================================================
+   PRUDLE - استقبال بيانات المستخدم من الصفحة الرئيسية
+===================================================== */
+
+const PRUDLE_PARENT_ORIGIN =
+  "https://www.prudle-education.com";
+
+
+/* استقبال بيانات المستخدم */
+window.addEventListener("message", function(event){
+
+  /* السماح فقط لموقع Prudle */
+  if(event.origin !== PRUDLE_PARENT_ORIGIN){
+    return;
+  }
+
+  const data = event.data || {};
 
   if(
-    data &&
-    typeof data === "object" &&
+    !data ||
+    typeof data !== "object"
+  ){
+    return;
+  }
+
+
+  /*
+    دعم النظام الجديد:
+    PRUDLE_USER_INFO
+
+    ودعم النظام السابق:
+    PRUDLE_USER_CONTEXT
+  */
+  if(
+    data.type === "PRUDLE_USER_INFO" ||
     data.type === "PRUDLE_USER_CONTEXT"
   ){
-    const username=txt(
+
+    const username = txt(
       data.username ||
+      data.assignedBy ||
       data.userName ||
       data.displayName ||
+      data.fullName ||
       data.name
     );
 
+
     if(username){
-      CURRENT_RECEIVER_USERNAME=username;
+
+      CURRENT_RECEIVER_USERNAME =
+        username;
+
+      console.log(
+        "PRUDLE USER RECEIVED:",
+        CURRENT_RECEIVER_USERNAME
+      );
+
     }
+
   }
+
 });
 
+
+/* =====================================================
+   طلب بيانات المستخدم من الصفحة الرئيسية
+===================================================== */
+
 function requestParentUsername(){
-  if(window.parent && window.parent !== window){
-    window.parent.postMessage({type:"PRUDLE_REQUEST_USER"},"*");
+
+  if(
+    window.parent &&
+    window.parent !== window
+  ){
+
+    window.parent.postMessage(
+      {
+        type:
+          "PRUDLE_REQUEST_USER_INFO"
+      },
+      PRUDLE_PARENT_ORIGIN
+    );
+
+    /*
+      دعم الكود السابق أيضًا
+    */
+    window.parent.postMessage(
+      {
+        type:
+          "PRUDLE_REQUEST_USER"
+      },
+      PRUDLE_PARENT_ORIGIN
+    );
+
   }
+
 }
 
+
+/* طلب الاسم بعد تحميل الصفحة */
 requestParentUsername();
+
+
+/*
+  إعادة الطلب عدة مرات
+  للتأكد من وصول البيانات بعد تحميل iframe
+*/
+
+setTimeout(
+  requestParentUsername,
+  200
+);
+
+setTimeout(
+  requestParentUsername,
+  600
+);
+
+setTimeout(
+  requestParentUsername,
+  1200
+);
 const $=id=>document.getElementById(id);
 
 let tasks=[];
