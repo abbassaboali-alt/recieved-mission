@@ -551,6 +551,11 @@ window.addEventListener("message", function(event){
         CURRENT_RECEIVER_USERNAME
       );
 
+      /* إعادة الاشتراك بعد معرفة اليوزر لعرض مهامه فقط */
+      if(typeof listenTasks==="function"){
+        listenTasks();
+      }
+
     }
 
   }
@@ -656,9 +661,27 @@ function listenTasks(){
   $("employeeInfo").textContent="جاري تحميل المهام...";
   unsubscribe=db.collection(TASKS)
     .onSnapshot(snap=>{
+      const currentUser=txt(currentReceiverUsername()).toLowerCase();
+
       tasks=snap.docs.map(d=>({id:d.id,...d.data()}))
         .filter(t=>t.status!=="cancelled")
+        .filter(t=>{
+          const assignedUsername=txt(t.employeeUsername).toLowerCase();
+
+          /* المهام الجديدة مرتبطة مباشرة بيوزر الموظف */
+          if(assignedUsername){
+            return currentUser && assignedUsername===currentUser;
+          }
+
+          /*
+            دعم السجلات القديمة:
+            إذا لم يكن employeeUsername محفوظاً، يبقى السجل ظاهراً
+            حتى لا تختفي المهام القديمة أثناء الانتقال للنظام الجديد.
+          */
+          return true;
+        })
         .sort((a,b)=>((toDate(b.createdAt) && toDate(b.createdAt).getTime()) || 0)-((toDate(a.createdAt) && toDate(a.createdAt).getTime()) || 0));
+
       render();
     },err=>{
       console.error(err);
@@ -678,22 +701,7 @@ function render(){
     return;
   }
 
-  const grouped = new Map();
-  tasks.forEach(t=>{
-    const name=txt(t.employeeName)||"غير محدد";
-    const key=name.toLowerCase();
-    if(!grouped.has(key)) grouped.set(key,{name,tasks:[]});
-    grouped.get(key).tasks.push(t);
-  });
-
-  $("cards").innerHTML=[...grouped.values()].map(group=>`
-    <section class="employee-group">
-      <div class="employee-group-head">
-        <span><i class="fa-solid fa-user"></i> ${esc(group.name)}</span>
-        <span class="count">${group.tasks.length} مهمة</span>
-      </div>
-      <div class="employee-group-body">
-        ${group.tasks.map(t=>`
+  $("cards").innerHTML=tasks.map(t=>`
           <article class="card ${t.status==="completed"?"done":""}">
             <div class="card-head">
               <div>
@@ -744,9 +752,6 @@ function render(){
               `:""}
             </div>
           </article>
-        `).join("")}
-      </div>
-    </section>
   `).join("");
 
   document.querySelectorAll(".receiveBtn").forEach(b=>b.onclick=()=>receiveTask(b.dataset.id));
