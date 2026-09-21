@@ -418,11 +418,15 @@ img{
     </div>
   </section>
 
-  <section class="login">
-    <button id="refreshBtn"><i class="fa-solid fa-rotate"></i> تحديث المهام</button>
+  <section class="login" id="secureMissionLogin">
+    <input id="missionUsername" type="text" autocomplete="username" placeholder="اسم المستخدم" style="direction:ltr;text-align:left">
+    <input id="missionPassword" type="password" autocomplete="current-password" placeholder="كلمة المرور" style="direction:ltr;text-align:left">
+    <button id="verifyMissionUser" class="btn-green"><i class="fa-solid fa-lock-open"></i> عرض مهامي</button>
+    <button id="lockMissionUser" class="btn-gray" style="display:none"><i class="fa-solid fa-lock"></i> إخفاء المهام</button>
+    <button id="refreshBtn" style="display:none"><i class="fa-solid fa-rotate"></i> تحديث المهام</button>
   </section>
 
-  <div class="info" id="employeeInfo">يتم عرض جميع المهام تلقائياً.</div>
+  <div class="info" id="employeeInfo">أدخل اسم المستخدم وكلمة المرور لعرض مهامك.</div>
 
   <section class="stats">
     <div class="stat"><span>تم الإسناد</span><b id="sAssigned">0</b></div>
@@ -479,8 +483,15 @@ function storedUsername(){
   }
 }
 
+let VERIFIED_RECEIVER_USERNAME="";
+let MISSION_USER_VERIFIED=false;
+
+function normalizeUsername(v){
+  return txt(v).toLowerCase().replace(/\s+/g,"");
+}
+
 function currentReceiverUsername(){
-  return txt(CURRENT_RECEIVER_USERNAME) || storedUsername();
+  return MISSION_USER_VERIFIED ? VERIFIED_RECEIVER_USERNAME : "";
 }
 
 function receiverLabel(t){
@@ -543,17 +554,13 @@ window.addEventListener("message", function(event){
 
     if(username){
 
-      CURRENT_RECEIVER_USERNAME =
-        username;
+      CURRENT_RECEIVER_USERNAME = username;
 
-      console.log(
-        "PRUDLE USER RECEIVED:",
-        CURRENT_RECEIVER_USERNAME
-      );
-
-      /* إعادة الاشتراك بعد معرفة اليوزر لعرض مهامه فقط */
-      if(typeof listenTasks==="function"){
-        listenTasks();
+      /* اسم المستخدم القادم من الصفحة الرئيسية يستخدم للتعبئة فقط.
+         لا يتم عرض أي مهمة إلا بعد إدخال كلمة المرور والتحقق منها. */
+      const userInput=document.getElementById("missionUsername");
+      if(userInput && !userInput.value){
+        userInput.value=username;
       }
 
     }
@@ -656,37 +663,108 @@ function priorityClass(p){return p==="high"?"p-high":p==="low"?"p-low":"p-medium
 
 
 
+function clearMissionView(){
+  if(unsubscribe){ try{unsubscribe();}catch(e){} unsubscribe=null; }
+  tasks=[];
+  $("sAssigned").textContent="0";
+  $("sProgress").textContent="0";
+  $("sCompleted").textContent="0";
+  $("cards").innerHTML='<div class="empty"><i class="fa-solid fa-lock"></i><br><br>أدخل اسم المستخدم وكلمة المرور لعرض مهامك.</div>';
+}
+
+async function verifyMissionUser(){
+  const username=normalizeUsername($("missionUsername").value);
+  const password=txt($("missionPassword").value);
+
+  if(!username || !password){
+    alert("أدخل اسم المستخدم وكلمة المرور.");
+    return;
+  }
+
+  $("verifyMissionUser").disabled=true;
+  try{
+    /* نفس قاعدة الصلاحيات: USERS / usernameLower / password */
+    let snap=await db.collection("USERS")
+      .where("usernameLower","==",username)
+      .limit(1)
+      .get();
+
+    if(snap.empty){
+      alert("اسم المستخدم أو كلمة المرور غير صحيحة.");
+      clearMissionView();
+      return;
+    }
+
+    const doc=snap.docs[0];
+    const u=doc.data()||{};
+    const savedPassword=txt(u.password);
+
+    if(savedPassword !== password){
+      alert("اسم المستخدم أو كلمة المرور غير صحيحة.");
+      clearMissionView();
+      return;
+    }
+
+    VERIFIED_RECEIVER_USERNAME=normalizeUsername(u.username || u.usernameLower || username);
+    MISSION_USER_VERIFIED=true;
+
+    $("missionPassword").value="";
+    $("missionUsername").value=u.username || username;
+    $("missionUsername").disabled=true;
+    $("verifyMissionUser").style.display="none";
+    $("lockMissionUser").style.display="";
+    $("refreshBtn").style.display="";
+    $("employeeInfo").textContent="تم التحقق من المستخدم. يتم عرض المهام المسندة له فقط.";
+
+    listenTasks();
+  }catch(e){
+    console.error(e);
+    clearMissionView();
+    alert("تعذر التحقق من بيانات المستخدم.");
+  }finally{
+    $("verifyMissionUser").disabled=false;
+  }
+}
+
+function lockMissionUser(){
+  MISSION_USER_VERIFIED=false;
+  VERIFIED_RECEIVER_USERNAME="";
+  clearMissionView();
+  $("missionUsername").disabled=false;
+  $("missionUsername").value="";
+  $("missionPassword").value="";
+  $("verifyMissionUser").style.display="";
+  $("lockMissionUser").style.display="none";
+  $("refreshBtn").style.display="none";
+  $("employeeInfo").textContent="أدخل اسم المستخدم وكلمة المرور لعرض مهامك.";
+}
+
 function listenTasks(){
-  if(unsubscribe) unsubscribe();
+  if(unsubscribe){ try{unsubscribe();}catch(e){} unsubscribe=null; }
+
+  if(!MISSION_USER_VERIFIED || !VERIFIED_RECEIVER_USERNAME){
+    clearMissionView();
+    return;
+  }
+
   $("employeeInfo").textContent="جاري تحميل المهام...";
+
+  /* القراءة مقيّدة بيوزر المستلم؛ السجلات القديمة بلا employeeUsername لا تظهر */
   unsubscribe=db.collection(TASKS)
+    .where("employeeUsername","==",VERIFIED_RECEIVER_USERNAME)
     .onSnapshot(snap=>{
-      const currentUser=txt(currentReceiverUsername()).toLowerCase();
+      if(!MISSION_USER_VERIFIED) return;
 
       tasks=snap.docs.map(d=>({id:d.id,...d.data()}))
         .filter(t=>t.status!=="cancelled")
-        .filter(t=>{
-          const assignedUsername=txt(t.employeeUsername).toLowerCase();
-
-          /* المهام الجديدة مرتبطة مباشرة بيوزر الموظف */
-          if(assignedUsername){
-            return currentUser && assignedUsername===currentUser;
-          }
-
-          /*
-            دعم السجلات القديمة:
-            إذا لم يكن employeeUsername محفوظاً، يبقى السجل ظاهراً
-            حتى لا تختفي المهام القديمة أثناء الانتقال للنظام الجديد.
-          */
-          return true;
-        })
-        .sort((a,b)=>((toDate(b.createdAt) && toDate(b.createdAt).getTime()) || 0)-((toDate(a.createdAt) && toDate(a.createdAt).getTime()) || 0));
+        .filter(t=>normalizeUsername(t.employeeUsername)===VERIFIED_RECEIVER_USERNAME)
+        .sort((a,b)=>((toDate(b.createdAt)&&toDate(b.createdAt).getTime())||0)-((toDate(a.createdAt)&&toDate(a.createdAt).getTime())||0));
 
       render();
     },err=>{
       console.error(err);
-      $("employeeInfo").textContent="تعذر تحميل المهام. راجع صلاحيات Firestore.";
-      $("cards").innerHTML='<div class="empty">تعذر الاتصال بقاعدة البيانات.</div>';
+      $("employeeInfo").textContent="تعذر تحميل المهام.";
+      $("cards").innerHTML='<div class="empty">تعذر تحميل المهام الخاصة بهذا المستخدم.</div>';
     });
 }
 
@@ -760,8 +838,16 @@ function render(){
 }
 
 async function receiveTask(id){
+  if(!MISSION_USER_VERIFIED || !VERIFIED_RECEIVER_USERNAME){
+    alert("يجب التحقق من اسم المستخدم وكلمة المرور أولاً.");
+    return;
+  }
   const t=tasks.find(x=>x.id===id);
   if(!t)return;
+  if(normalizeUsername(t.employeeUsername)!==VERIFIED_RECEIVER_USERNAME){
+    alert("هذه المهمة غير مسندة لهذا المستخدم.");
+    return;
+  }
 
   const receiverUsername=currentReceiverUsername();
 
@@ -789,6 +875,15 @@ async function receiveTask(id){
 }
 
 async function saveNote(id){
+  if(!MISSION_USER_VERIFIED || !VERIFIED_RECEIVER_USERNAME){
+    alert("يجب التحقق من اسم المستخدم وكلمة المرور أولاً.");
+    return;
+  }
+  const securedTask=tasks.find(x=>x.id===id);
+  if(!securedTask || normalizeUsername(securedTask.employeeUsername)!==VERIFIED_RECEIVER_USERNAME){
+    alert("هذه المهمة غير مسندة لهذا المستخدم.");
+    return;
+  }
   const noteEl=$("note_"+id); const note=txt(noteEl ? noteEl.value : "");
   try{
     await db.collection(TASKS).doc(id).set({
@@ -803,8 +898,16 @@ async function saveNote(id){
 }
 
 async function finishTask(id){
+  if(!MISSION_USER_VERIFIED || !VERIFIED_RECEIVER_USERNAME){
+    alert("يجب التحقق من اسم المستخدم وكلمة المرور أولاً.");
+    return;
+  }
   const t=tasks.find(x=>x.id===id);
   if(!t)return;
+  if(normalizeUsername(t.employeeUsername)!==VERIFIED_RECEIVER_USERNAME){
+    alert("هذه المهمة غير مسندة لهذا المستخدم.");
+    return;
+  }
   const noteEl=$("note_"+id); const note=txt(noteEl ? noteEl.value : "");
   if(!confirm(`تأكيد إنهاء المهمة: ${t.title}؟`))return;
   try{
@@ -819,7 +922,14 @@ async function finishTask(id){
   }
 }
 
-$("refreshBtn").onclick=function(){ listenTasks(); };
+$("refreshBtn").onclick=function(){
+  if(MISSION_USER_VERIFIED) listenTasks();
+};
+$("verifyMissionUser").onclick=verifyMissionUser;
+$("lockMissionUser").onclick=lockMissionUser;
+$("missionPassword").addEventListener("keydown",function(e){
+  if(e.key==="Enter") verifyMissionUser();
+});
 
 var prudleResizeTimer=null;
 function prudleViewportRefresh(){
@@ -832,7 +942,7 @@ window.addEventListener("resize",prudleViewportRefresh);
 window.addEventListener("orientationchange",prudleViewportRefresh);
 prudleViewportRefresh();
 
-listenTasks();
+clearMissionView();
 </script>
 </body>
 </html>
