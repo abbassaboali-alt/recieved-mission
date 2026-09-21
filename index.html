@@ -600,6 +600,10 @@ window.addEventListener("message", function(event){
         userInput.value=username;
       }
 
+      if(!MISSION_USER_VERIFIED){
+        setTimeout(startPreloginPendingAlert,0);
+      }
+
     }
 
   }
@@ -700,6 +704,75 @@ function priorityClass(p){return p==="high"?"p-high":p==="low"?"p-low":"p-medium
 
 
 
+
+/* =====================================================
+   إشعار قبل إدخال كلمة المرور
+   يعرض العدد فقط ولا يعرض تفاصيل المهام قبل التحقق.
+===================================================== */
+let PRELOGIN_ALERT_UNSUBSCRIBE=null;
+
+function preloginCandidateNames(){
+  const names=[
+    CURRENT_RECEIVER_USERNAME,
+    storedUsername(),
+    $("missionUsername") ? $("missionUsername").value : ""
+  ];
+  return [...new Set(
+    names.map(v=>txt(v).trim().toLowerCase()).filter(Boolean)
+  )];
+}
+
+function showPreloginPendingAlert(count){
+  const alertBox=$("pendingReceiveAlert");
+  if(!alertBox) return;
+
+  if(count>0){
+    $("pendingReceiveText").textContent=String(count);
+    $("pendingReceiveCount").textContent=String(count);
+    alertBox.classList.add("show");
+  }else{
+    $("pendingReceiveText").textContent="0";
+    $("pendingReceiveCount").textContent="0";
+    alertBox.classList.remove("show");
+  }
+}
+
+function startPreloginPendingAlert(){
+  if(PRELOGIN_ALERT_UNSUBSCRIBE){
+    try{PRELOGIN_ALERT_UNSUBSCRIBE();}catch(e){}
+    PRELOGIN_ALERT_UNSUBSCRIBE=null;
+  }
+
+  const names=preloginCandidateNames();
+  if(!names.length){
+    showPreloginPendingAlert(0);
+    return;
+  }
+
+  /*
+    لا نعرض عنوان المهمة أو تفاصيلها قبل كلمة المرور.
+    فقط نقرأ العدد للمستخدم القادم من جلسة Prudle/اسم المستخدم المعبأ.
+  */
+  PRELOGIN_ALERT_UNSUBSCRIBE=db.collection(TASKS).onSnapshot(snap=>{
+    if(MISSION_USER_VERIFIED) return;
+
+    const count=snap.docs
+      .map(d=>d.data()||{})
+      .filter(t=>t.status!=="cancelled")
+      .filter(t=>t.status==="assigned" && !t.receivedAt)
+      .filter(t=>{
+        const taskUsername=normalizeUsername(t.employeeUsername || "");
+        const taskName=txt(t.employeeName).trim().toLowerCase();
+        return names.includes(taskUsername) || names.includes(taskName);
+      }).length;
+
+    showPreloginPendingAlert(count);
+  },err=>{
+    console.error("Pre-login notification error:",err);
+    showPreloginPendingAlert(0);
+  });
+}
+
 function clearMissionView(){
   if(unsubscribe){ try{unsubscribe();}catch(e){} unsubscribe=null; }
   tasks=[];
@@ -711,6 +784,9 @@ function clearMissionView(){
   if($("pendingReceiveText")) $("pendingReceiveText").textContent="0";
   if($("pendingReceiveCount")) $("pendingReceiveCount").textContent="0";
   $("cards").innerHTML='<div class="empty"><i class="fa-solid fa-lock"></i><br><br>أدخل اسم المستخدم وكلمة المرور لعرض مهامك.</div>';
+
+  /* بعد إخفاء التفاصيل أبقِ إشعار العدد ظاهراً قبل كلمة المرور */
+  setTimeout(startPreloginPendingAlert,0);
 }
 
 async function verifyMissionUser(){
@@ -1015,6 +1091,14 @@ $("verifyMissionUser").onclick=verifyMissionUser;
 $("lockMissionUser").onclick=lockMissionUser;
 $("missionPassword").addEventListener("keydown",function(e){
   if(e.key==="Enter") verifyMissionUser();
+});
+
+/* تحديث الإشعار بمجرد معرفة/تغيير اسم المستخدم، بدون طلب كلمة المرور */
+$("missionUsername").addEventListener("input",function(){
+  if(!MISSION_USER_VERIFIED) startPreloginPendingAlert();
+});
+$("missionUsername").addEventListener("change",function(){
+  if(!MISSION_USER_VERIFIED) startPreloginPendingAlert();
 });
 
 var prudleResizeTimer=null;
