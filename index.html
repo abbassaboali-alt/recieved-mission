@@ -520,6 +520,7 @@ function storedUsername(){
 }
 
 let VERIFIED_RECEIVER_USERNAME="";
+let VERIFIED_RECEIVER_NAMES=[];
 let MISSION_USER_VERIFIED=false;
 
 function normalizeUsername(v){
@@ -746,6 +747,21 @@ async function verifyMissionUser(){
     }
 
     VERIFIED_RECEIVER_USERNAME=normalizeUsername(u.username || u.usernameLower || username);
+
+    /* أسماء المستخدم المحتملة لدعم المهام القديمة التي كانت تحفظ employeeName فقط */
+    VERIFIED_RECEIVER_NAMES=[
+      u.taskDisplayName,
+      u.fullName,
+      u.trainerName,
+      u.displayName,
+      u.name,
+      u.username,
+      u.usernameLower,
+      username
+    ]
+    .map(v=>txt(v).trim().toLowerCase())
+    .filter(Boolean);
+
     MISSION_USER_VERIFIED=true;
 
     $("missionPassword").value="";
@@ -769,6 +785,7 @@ async function verifyMissionUser(){
 function lockMissionUser(){
   MISSION_USER_VERIFIED=false;
   VERIFIED_RECEIVER_USERNAME="";
+  VERIFIED_RECEIVER_NAMES=[];
   clearMissionView();
   $("missionUsername").disabled=false;
   $("missionUsername").value="";
@@ -789,15 +806,32 @@ function listenTasks(){
 
   $("employeeInfo").textContent="جاري تحميل المهام...";
 
-  /* القراءة مقيّدة بيوزر المستلم؛ السجلات القديمة بلا employeeUsername لا تظهر */
+  /*
+    توافق كامل مع كود الإسناد الأول والجديد:
+    - السجلات الجديدة: employeeUsername
+    - السجلات القديمة: employeeName فقط
+    لذلك نقرأ EmployeeTasks ثم نفلتر محلياً حسب المستخدم الذي تم التحقق منه.
+  */
   unsubscribe=db.collection(TASKS)
-    .where("employeeUsername","==",VERIFIED_RECEIVER_USERNAME)
     .onSnapshot(snap=>{
       if(!MISSION_USER_VERIFIED) return;
 
       tasks=snap.docs.map(d=>({id:d.id,...d.data()}))
         .filter(t=>t.status!=="cancelled")
-        .filter(t=>normalizeUsername(t.employeeUsername)===VERIFIED_RECEIVER_USERNAME)
+        .filter(t=>{
+          const taskUsername=normalizeUsername(t.employeeUsername || "");
+          const taskName=txt(t.employeeName).trim().toLowerCase();
+
+          const usernameMatch=
+            taskUsername &&
+            taskUsername===VERIFIED_RECEIVER_USERNAME;
+
+          const legacyNameMatch=
+            taskName &&
+            VERIFIED_RECEIVER_NAMES.includes(taskName);
+
+          return usernameMatch || legacyNameMatch;
+        })
         .sort((a,b)=>((toDate(b.createdAt)&&toDate(b.createdAt).getTime())||0)-((toDate(a.createdAt)&&toDate(a.createdAt).getTime())||0));
 
       render();
@@ -890,7 +924,13 @@ async function receiveTask(id){
   }
   const t=tasks.find(x=>x.id===id);
   if(!t)return;
-  if(normalizeUsername(t.employeeUsername)!==VERIFIED_RECEIVER_USERNAME){
+  const taskUsername=normalizeUsername(t.employeeUsername || "");
+  const taskName=txt(t.employeeName).trim().toLowerCase();
+  const belongsToVerifiedUser=
+    (taskUsername && taskUsername===VERIFIED_RECEIVER_USERNAME) ||
+    (taskName && VERIFIED_RECEIVER_NAMES.includes(taskName));
+
+  if(!belongsToVerifiedUser){
     alert("هذه المهمة غير مسندة لهذا المستخدم.");
     return;
   }
