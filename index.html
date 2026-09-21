@@ -405,6 +405,37 @@ img{
   }
 }
 
+
+/* ===== إشعار المهام غير المستلمة ===== */
+.pending-alert{
+  display:none;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin:12px 0 4px;
+  padding:13px 15px;
+  border:1px solid #f0cf8a;
+  border-radius:14px;
+  background:#fff8e8;
+  color:#8a5700;
+  font-weight:900;
+  box-shadow:0 4px 14px rgba(201,118,0,.08);
+}
+.pending-alert.show{display:flex}
+.pending-alert .pending-count{
+  min-width:34px;
+  height:34px;
+  padding:0 9px;
+  border-radius:999px;
+  background:#c97600;
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:17px;
+}
+@media(max-width:900px){.pending-alert{margin:10px 12px 4px}}
+
 </style>
 </head>
 <body>
@@ -427,6 +458,11 @@ img{
   </section>
 
   <div class="info" id="employeeInfo">أدخل اسم المستخدم وكلمة المرور لعرض مهامك.</div>
+
+  <div class="pending-alert" id="pendingReceiveAlert" role="status" aria-live="polite">
+    <span><i class="fa-solid fa-bell"></i> لديك <b id="pendingReceiveText">0</b> مهمة لم يتم تأكيد استلامها</span>
+    <span class="pending-count" id="pendingReceiveCount">0</span>
+  </div>
 
   <section class="stats">
     <div class="stat"><span>تم الإسناد</span><b id="sAssigned">0</b></div>
@@ -669,6 +705,10 @@ function clearMissionView(){
   $("sAssigned").textContent="0";
   $("sProgress").textContent="0";
   $("sCompleted").textContent="0";
+  const pendingAlert=$("pendingReceiveAlert");
+  if(pendingAlert) pendingAlert.classList.remove("show");
+  if($("pendingReceiveText")) $("pendingReceiveText").textContent="0";
+  if($("pendingReceiveCount")) $("pendingReceiveCount").textContent="0";
   $("cards").innerHTML='<div class="empty"><i class="fa-solid fa-lock"></i><br><br>أدخل اسم المستخدم وكلمة المرور لعرض مهامك.</div>';
 }
 
@@ -773,6 +813,12 @@ function render(){
   $("sAssigned").textContent=tasks.filter(t=>t.status==="assigned").length;
   $("sProgress").textContent=tasks.filter(t=>t.status==="in_progress").length;
   $("sCompleted").textContent=tasks.filter(t=>t.status==="completed").length;
+
+  /* إشعار بعدد المهام التي لم يؤكد الموظف استلامها */
+  const pendingReceive=tasks.filter(t=>t.status==="assigned").length;
+  $("pendingReceiveText").textContent=pendingReceive;
+  $("pendingReceiveCount").textContent=pendingReceive;
+  $("pendingReceiveAlert").classList.toggle("show",pendingReceive>0);
 
   if(!tasks.length){
     $("cards").innerHTML='<div class="empty">لا توجد مهام مسندة لهذا الموظف حالياً.</div>';
