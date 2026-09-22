@@ -675,6 +675,59 @@ let tasks=[];
 let unsubscribe=null;
 
 function txt(v){return String(v == null ? "" : v).trim();}
+
+function safeAssigneeStateKey(a){
+  const raw=txt(a?.username || a?.id || a?.name).toLowerCase();
+  return raw.replace(/[^a-z0-9_\-]/g,"_");
+}
+
+function normalizeTaskAssignees(task){
+  if(Array.isArray(task?.assignees) && task.assignees.length){
+    return task.assignees.map(a=>({
+      name:txt(a?.name || a?.employeeName),
+      username:txt(a?.username || a?.employeeUsername),
+      id:txt(a?.id || a?.employeeUserId)
+    }));
+  }
+  return [{
+    name:txt(task?.employeeName),
+    username:txt(task?.employeeUsername),
+    id:txt(task?.employeeUserId)
+  }].filter(a=>a.name || a.username || a.id);
+}
+
+function currentAssigneeForTask(task){
+  return normalizeTaskAssignees(task).find(a=>{
+    const u=normalizeUsername(a.username || "");
+    const n=txt(a.name).toLowerCase();
+    return (u && u===VERIFIED_RECEIVER_USERNAME) ||
+           (n && VERIFIED_RECEIVER_NAMES.includes(n));
+  }) || null;
+}
+
+function myTaskState(task){
+  const a=currentAssigneeForTask(task);
+  if(!a) return null;
+  const key=safeAssigneeStateKey(a);
+  const state=task?.assigneeStates?.[key];
+  if(state) return {...state,key,assignee:a};
+  /* توافق مع السجلات القديمة */
+  return {
+    key,
+    assignee:a,
+    status:task.status || "assigned",
+    employeeNote:task.employeeNote || "",
+    receivedBy:task.receivedBy || "",
+    receivedByUsername:task.receivedByUsername || "",
+    receivedAt:task.receivedAt || null,
+    completedAt:task.completedAt || null
+  };
+}
+
+function myTaskStatus(task){
+  return myTaskState(task)?.status || task?.status || "assigned";
+}
+
 function esc(v){return txt(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);}
 function toDate(v){
   try{
@@ -759,11 +812,13 @@ function startPreloginPendingAlert(){
     const count=snap.docs
       .map(d=>d.data()||{})
       .filter(t=>t.status!=="cancelled")
-      .filter(t=>t.status==="assigned" && !t.receivedAt)
+      .filter(t=>myTaskStatus(t)==="assigned")
       .filter(t=>{
-        const taskUsername=normalizeUsername(t.employeeUsername || "");
-        const taskName=txt(t.employeeName).trim().toLowerCase();
-        return names.includes(taskUsername) || names.includes(taskName);
+        return normalizeTaskAssignees(t).some(a=>{
+          const taskUsername=normalizeUsername(a.username || "");
+          const taskName=txt(a.name).trim().toLowerCase();
+          return names.includes(taskUsername) || names.includes(taskName);
+        });
       }).length;
 
     showPreloginPendingAlert(count);
@@ -895,18 +950,7 @@ function listenTasks(){
       tasks=snap.docs.map(d=>({id:d.id,...d.data()}))
         .filter(t=>t.status!=="cancelled")
         .filter(t=>{
-          const taskUsername=normalizeUsername(t.employeeUsername || "");
-          const taskName=txt(t.employeeName).trim().toLowerCase();
-
-          const usernameMatch=
-            taskUsername &&
-            taskUsername===VERIFIED_RECEIVER_USERNAME;
-
-          const legacyNameMatch=
-            taskName &&
-            VERIFIED_RECEIVER_NAMES.includes(taskName);
-
-          return usernameMatch || legacyNameMatch;
+          return !!currentAssigneeForTask(t);
         })
         .sort((a,b)=>((toDate(b.createdAt)&&toDate(b.createdAt).getTime())||0)-((toDate(a.createdAt)&&toDate(a.createdAt).getTime())||0));
 
@@ -920,12 +964,11 @@ function listenTasks(){
 
 function render(){
   $("employeeInfo").textContent=`إجمالي المهام المعروضة: ${tasks.length}`;
-  $("sAssigned").textContent=tasks.filter(t=>t.status==="assigned").length;
-  $("sProgress").textContent=tasks.filter(t=>t.status==="in_progress").length;
-  $("sCompleted").textContent=tasks.filter(t=>t.status==="completed").length;
+  $("sAssigned").textContent=tasks.filter(t=>myTaskStatus(t)==="assigned").length;
+  $("sProgress").textContent=tasks.filter(t=>myTaskStatus(t)==="in_progress").length;
+  $("sCompleted").textContent=tasks.filter(t=>myTaskStatus(t)==="completed").length;
 
-  /* إشعار بعدد المهام التي لم يؤكد الموظف استلامها */
-  const pendingReceive=tasks.filter(t=>t.status==="assigned").length;
+  const pendingReceive=tasks.filter(t=>myTaskStatus(t)==="assigned").length;
   $("pendingReceiveText").textContent=pendingReceive;
   $("pendingReceiveCount").textContent=pendingReceive;
   $("pendingReceiveAlert").classList.toggle("show",pendingReceive>0);
@@ -935,58 +978,67 @@ function render(){
     return;
   }
 
-  $("cards").innerHTML=tasks.map(t=>`
-          <article class="card ${t.status==="completed"?"done":""}">
-            <div class="card-head">
-              <div>
-                <h3>${esc(t.title||"—")}</h3>
-                <div class="meta">تاريخ الإسناد: ${dateTime(t.createdAt)} · الاستحقاق: ${dateOnly(t.dueDate)}</div>
-                <div class="meta" style="margin-top:5px;color:#164478;font-weight:900">
-                  <i class="fa-solid fa-user-shield"></i>
-                  أُسندت بواسطة: ${esc(assignerLabel(t))}
-                </div>
-                ${t.status!=="assigned"?`
-                <div class="meta" style="margin-top:5px;color:#168349;font-weight:900">
-                  <i class="fa-solid fa-user-check"></i>
-                  تم الاستلام بواسطة: ${esc(receiverLabel(t))}
-                </div>`:""}
-              </div>
-              <div>
-                <span class="pill ${priorityClass(t.priority)}">${priorityLabel(t.priority)}</span>
-                <span class="pill ${statusClass(t.status)}">${statusLabel(t.status)}</span>
-              </div>
+  $("cards").innerHTML=tasks.map(t=>{
+    const state=myTaskState(t) || {};
+    const st=state.status || "assigned";
+    const sharedNames=normalizeTaskAssignees(t).map(a=>a.name||a.username).filter(Boolean).join("، ");
+    return `
+      <article class="card ${st==="completed"?"done":""}">
+        <div class="card-head">
+          <div>
+            <h3>${esc(t.title||"—")}</h3>
+            <div class="meta">تاريخ الإسناد: ${dateTime(t.createdAt)} · الاستحقاق: ${dateOnly(t.dueDate)}</div>
+            ${normalizeTaskAssignees(t).length>1?`
+            <div class="meta" style="margin-top:5px;color:#7253b7;font-weight:900">
+              <i class="fa-solid fa-users"></i>
+              مهمة مشتركة مع: ${esc(sharedNames)}
+            </div>`:""}
+            <div class="meta" style="margin-top:5px;color:#164478;font-weight:900">
+              <i class="fa-solid fa-user-shield"></i>
+              أُسندت بواسطة: ${esc(assignerLabel(t))}
             </div>
+            ${st!=="assigned"?`
+            <div class="meta" style="margin-top:5px;color:#168349;font-weight:900">
+              <i class="fa-solid fa-user-check"></i>
+              تم الاستلام بواسطة: ${esc(state.receivedByUsername || state.receivedBy || VERIFIED_RECEIVER_USERNAME)}
+            </div>`:""}
+          </div>
+          <div>
+            <span class="pill ${priorityClass(t.priority)}">${priorityLabel(t.priority)}</span>
+            <span class="pill ${statusClass(st)}">${statusLabel(st)}</span>
+          </div>
+        </div>
 
-            ${t.details?`<div class="details">${esc(t.details)}</div>`:""}
-            ${t.adminNote?`<div class="note"><b>ملاحظة الإدارة:</b><br>${esc(t.adminNote)}</div>`:""}
-            ${t.employeeNote?`<div class="note employee"><b>ملاحظتي:</b><br>${esc(t.employeeNote)}</div>`:""}
+        ${t.details?`<div class="details">${esc(t.details)}</div>`:""}
+        ${t.adminNote?`<div class="note"><b>ملاحظة الإدارة:</b><br>${esc(t.adminNote)}</div>`:""}
+        ${state.employeeNote?`<div class="note employee"><b>ملاحظتي:</b><br>${esc(state.employeeNote)}</div>`:""}
 
-            <div class="card-actions">
-              ${t.status==="assigned"?`
-                <button class="btn-orange receiveBtn" data-id="${t.id}">
-                  <i class="fa-solid fa-check"></i> تم الاستلام
-                </button>`:""}
+        <div class="card-actions">
+          ${st==="assigned"?`
+            <button class="btn-orange receiveBtn" data-id="${t.id}">
+              <i class="fa-solid fa-check"></i> تم الاستلام
+            </button>`:""}
 
-              ${t.status==="in_progress"?`
-                <textarea id="note_${t.id}" placeholder="اكتب ملاحظتك قبل إنهاء المهمة (اختياري)...">${esc(t.employeeNote||"")}</textarea>
-                <button class="btn-green finishBtn" data-id="${t.id}">
-                  <i class="fa-solid fa-circle-check"></i> تم إنهاء المهمة
-                </button>
-                <button class="saveNoteBtn" data-id="${t.id}">
-                  <i class="fa-solid fa-floppy-disk"></i> حفظ الملاحظة فقط
-                </button>
-              `:""}
+          ${st==="in_progress"?`
+            <textarea id="note_${t.id}" placeholder="اكتب ملاحظتك قبل إنهاء المهمة (اختياري)...">${esc(state.employeeNote||"")}</textarea>
+            <button class="btn-green finishBtn" data-id="${t.id}">
+              <i class="fa-solid fa-circle-check"></i> تم إنهاء المهمة
+            </button>
+            <button class="saveNoteBtn" data-id="${t.id}">
+              <i class="fa-solid fa-floppy-disk"></i> حفظ الملاحظة فقط
+            </button>
+          `:""}
 
-              ${t.status==="completed"?`
-                <div class="meta">
-                  تم الاستلام بواسطة: ${esc(receiverLabel(t))}
-                  · وقت الاستلام: ${dateTime(t.receivedAt)}
-                  · تم الإنهاء: ${dateTime(t.completedAt)}
-                </div>
-              `:""}
+          ${st==="completed"?`
+            <div class="meta">
+              تم الاستلام بواسطة: ${esc(state.receivedByUsername || state.receivedBy || VERIFIED_RECEIVER_USERNAME)}
+              · وقت الاستلام: ${dateTime(state.receivedAt)}
+              · تم الإنهاء: ${dateTime(state.completedAt)}
             </div>
-          </article>
-  `).join("");
+          `:""}
+        </div>
+      </article>`;
+  }).join("");
 
   document.querySelectorAll(".receiveBtn").forEach(b=>b.onclick=()=>receiveTask(b.dataset.id));
   document.querySelectorAll(".finishBtn").forEach(b=>b.onclick=()=>finishTask(b.dataset.id));
@@ -1000,37 +1052,39 @@ async function receiveTask(id){
   }
   const t=tasks.find(x=>x.id===id);
   if(!t)return;
-  const taskUsername=normalizeUsername(t.employeeUsername || "");
-  const taskName=txt(t.employeeName).trim().toLowerCase();
-  const belongsToVerifiedUser=
-    (taskUsername && taskUsername===VERIFIED_RECEIVER_USERNAME) ||
-    (taskName && VERIFIED_RECEIVER_NAMES.includes(taskName));
-
-  if(!belongsToVerifiedUser){
+  const state=myTaskState(t);
+  if(!state){
     alert("هذه المهمة غير مسندة لهذا المستخدم.");
     return;
   }
 
   const receiverUsername=currentReceiverUsername();
-
   if(!receiverUsername){
     requestParentUsername();
     alert("تعذر قراءة اسم المستخدم الحالي. حدّث الصفحة ثم حاول مرة أخرى.");
     return;
   }
 
-  if(!confirm(
-    `تأكيد استلام المهمة: ${t.title}؟\n\nسيتم تسجيل المستلم باسم: ${receiverUsername}`
-  ))return;
+  if(!confirm(`تأكيد استلام المهمة: ${t.title}؟\n\nسيتم تسجيل المستلم باسم: ${receiverUsername}`))return;
 
   try{
-    await db.collection(TASKS).doc(id).set({
-      status:"in_progress",
-      receivedBy:receiverUsername,
-      receivedByUsername:receiverUsername,
-      receivedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    const patch={
+      [`assigneeStates.${state.key}.status`]:"in_progress",
+      [`assigneeStates.${state.key}.receivedBy`]:receiverUsername,
+      [`assigneeStates.${state.key}.receivedByUsername`]:receiverUsername,
+      [`assigneeStates.${state.key}.receivedAt`]:firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-    },{merge:true});
+    };
+    /* السجل القديم يبقى مدعوماً */
+    if(!Array.isArray(t.assignees) || !t.assignees.length){
+      Object.assign(patch,{
+        status:"in_progress",
+        receivedBy:receiverUsername,
+        receivedByUsername:receiverUsername,
+        receivedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    await db.collection(TASKS).doc(id).update(patch);
   }catch(e){
     console.error(e);alert("تعذر تسجيل الاستلام.");
   }
@@ -1041,19 +1095,19 @@ async function saveNote(id){
     alert("يجب التحقق من اسم المستخدم وكلمة المرور أولاً.");
     return;
   }
-  const securedTask=tasks.find(x=>x.id===id);
-  if(!securedTask || normalizeUsername(securedTask.employeeUsername)!==VERIFIED_RECEIVER_USERNAME){
-    alert("هذه المهمة غير مسندة لهذا المستخدم.");
-    return;
-  }
-  const noteEl=$("note_"+id); const note=txt(noteEl ? noteEl.value : "");
+  const t=tasks.find(x=>x.id===id);
+  if(!t) return;
+  const state=myTaskState(t);
+  if(!state) return alert("هذه المهمة غير مسندة لهذا المستخدم.");
+  const note=txt($("note_"+id)?.value);
+
   try{
-    await db.collection(TASKS).doc(id).set({
-      employeeNote:note,
-      employeeNoteUpdatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    const patch={
+      [`assigneeStates.${state.key}.employeeNote`]:note,
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-    },{merge:true});
-    alert("تم حفظ الملاحظة.");
+    };
+    if(!Array.isArray(t.assignees) || !t.assignees.length) patch.employeeNote=note;
+    await db.collection(TASKS).doc(id).update(patch);
   }catch(e){
     console.error(e);alert("تعذر حفظ الملاحظة.");
   }
@@ -1065,20 +1119,28 @@ async function finishTask(id){
     return;
   }
   const t=tasks.find(x=>x.id===id);
-  if(!t)return;
-  if(normalizeUsername(t.employeeUsername)!==VERIFIED_RECEIVER_USERNAME){
-    alert("هذه المهمة غير مسندة لهذا المستخدم.");
-    return;
-  }
-  const noteEl=$("note_"+id); const note=txt(noteEl ? noteEl.value : "");
-  if(!confirm(`تأكيد إنهاء المهمة: ${t.title}؟`))return;
+  if(!t) return;
+  const state=myTaskState(t);
+  if(!state) return alert("هذه المهمة غير مسندة لهذا المستخدم.");
+  const note=txt($("note_"+id)?.value);
+
+  if(!confirm(`تأكيد إنهاء المهمة: ${t.title}؟`)) return;
+
   try{
-    await db.collection(TASKS).doc(id).set({
-      status:"completed",
-      employeeNote:note,
-      completedAt:firebase.firestore.FieldValue.serverTimestamp(),
+    const patch={
+      [`assigneeStates.${state.key}.status`]:"completed",
+      [`assigneeStates.${state.key}.employeeNote`]:note,
+      [`assigneeStates.${state.key}.completedAt`]:firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()
-    },{merge:true});
+    };
+    if(!Array.isArray(t.assignees) || !t.assignees.length){
+      Object.assign(patch,{
+        status:"completed",
+        employeeNote:note,
+        completedAt:firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    await db.collection(TASKS).doc(id).update(patch);
   }catch(e){
     console.error(e);alert("تعذر إنهاء المهمة.");
   }
